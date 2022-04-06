@@ -1,0 +1,73 @@
+# MIT License
+
+# Copyright (c) 2022 Influx Community
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+version: '3.7'
+x-common-env-variables: &common-env
+  DOCKER_INFLUXDB_INIT_ORG: ${INFLUXDB_INIT_ORG}
+  DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUXDB_INIT_BUCKET}
+  DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_INIT_ADMIT_TOKEN}
+
+services:
+  traefik:
+    image: traefik:${vTRAEFIK}
+    container_name: reverse-proxy
+    depends_on:
+      - influxdb
+    networks:
+      - proxy-network
+    ports:
+      - "80:80"
+    security_opt:
+      - "no-new-privileges:true"
+    userns_mode: "host"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/traefik.toml:/etc/traefik/traefik.toml
+      - ./traefik/configurations:/etc/traefik/configurations
+
+
+  influxdb:
+    image: influxdb:${vINFLUXDB}
+    container_name: influxdb
+    environment: *common-env
+    env_file:
+      - ./influxdb.env
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.influxdb-router=influxdb-router@file"
+      - "traefik.http.routers.influxdb-router.service=influxdb@file"
+    networks:
+      - proxy-network
+    security_opt:
+      - "no-new-privileges:true"
+  
+  telegraf:
+    image: telegraf:${vTELEGRAF}
+    container_name: telegraf
+    hostname: telegraf
+    environment: *common-env
+    depends_on:
+      - influxdb
+      - traefik
+    labels:
+      - "traefik.enable=false"
+    networks:
+      - proxy-network
+    security_opt:
+      - "no-new-privileges:true"
+    volumes:
+      - ./telegraf/telegraf.toml:/etc/telegraf/telegraf.conf:ro
+
+networks:
+  proxy-network:
+    external: true
